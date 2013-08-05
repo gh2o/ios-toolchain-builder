@@ -294,6 +294,23 @@ class DMGDriver(EasyMixin):
 	def parse_plist_obj_data(self, node):
 		return binascii.a2b_base64(node.text)
 
+class HFSDriver(object):
+
+	def __init__(self, em):
+
+		self.__em = em
+		headem = BytesWrapper(em[0x400:0x600])
+
+		if not (
+			headem[0,2] == 0x482B and
+			headem[2,2] == 0x0004
+		):
+			raise ValueError('unsupported/bad HFS+ volume')
+
+		block_size = headem[40,4]
+		print(block_size)
+		raise 1
+
 def appleauth():
 
 	print('Please enter your Apple ID and password.')
@@ -343,8 +360,7 @@ def run():
 		raise Exception('bad DMG')
 
 	dmg = DMGDriver(em)
-	for offset in range(0, dmg.size, 32768):
-		sys.stdout.buffer.write(dmg[offset:offset+32768])
+	hfs = HFSDriver(dmg)
 
 def makedir(x):
 	try:
