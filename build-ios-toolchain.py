@@ -261,6 +261,9 @@ class DMGDriver(EasyMixin):
 		last_byte -= first_chunk.uoffset
 		return uncompressed_data[first_byte:last_byte+1]
 
+	def _easysize(self):
+		return self.__size
+
 	def decompress_chunk(self, chunk):
 		compressed_data = self.__em[chunk.coffset:chunk.coffset+chunk.csize]
 		return self.__decompressors[chunk.type](compressed_data, chunk.usize)
