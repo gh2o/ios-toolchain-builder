@@ -55,11 +55,23 @@ class RedirectHandler(HTTPRedirectHandler):
 
 class HandleWrapper(object):
 
+	max_cache_objects = 64
+
+	class CacheItem(object):
+		__slots__ = ['data', 'time']
+
 	def __init__(self, handle, size):
 		self.__handle = handle
 		self.__size = size
 		self.__virtualpos = None
 		self.__actualpos = None
+		self.__cache = {}
+		self.__cachetime = 0
+
+	def __clean(self):
+		while len(self.__cache) > self.max_cache_objects:
+			cachetime, pos = min((item.time, pos) for pos, item in self.__cache.items())
+			del self.__cache[pos]
 	
 	def __seek(self, pos):
 		if pos < 0:
@@ -67,13 +79,25 @@ class HandleWrapper(object):
 		self.__virtualpos = pos
 	
 	def __read(self, sz):
-		if self.__virtualpos != self.__actualpos:
-			self.__handle.seek(self.__virtualpos)
-			self.__actualpos = self.__virtualpos
-		data = self.__handle.read(sz)
-		self.__actualpos += sz
+
+		cacheitem = self.__cache.get(self.__virtualpos)
+		if cacheitem is not None and len(cacheitem.data) < sz:
+			cacheitem = None
+
+		if cacheitem is None:
+			if self.__virtualpos != self.__actualpos:
+				self.__handle.seek(self.__virtualpos)
+				self.__actualpos = self.__virtualpos
+			cacheitem = self.__cache[self.__virtualpos] = HandleWrapper.CacheItem()
+			cacheitem.data = self.__handle.read(sz)
+			self.__actualpos += sz
+
+		cacheitem.time = self.__cachetime
+		self.__cachetime += 1
+		self.__clean()
+
 		self.__virtualpos += sz
-		return data
+		return cacheitem.data[:sz]
 	
 	def __getitem__(self, key):
 		if isinstance(key, int):
