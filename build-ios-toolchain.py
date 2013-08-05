@@ -73,6 +73,12 @@ class EasyMixin(object):
 	
 	def offset(self, offset):
 		return OffsetFilter(self, offset)
+
+	def pieces(self, size, count=None):
+		if count is None:
+			count = self._easysize() // size
+		for offset in range(0, size * count, size):
+			yield self.offset(offset)
 	
 class HandleWrapper(EasyMixin):
 
@@ -237,13 +243,13 @@ class DMGDriver(EasyMixin):
 			raise ValueError('bad mish size')
 	
 		chunks = self.__chunks = []
-		for offset in range(204, len(bdata), 40):
-			chunk_type = blkx[offset,4]
-			chunk_comment = blkx[offset+4,4]
-			chunk_uncompressed_start = blkx[offset+8,8] * 512
-			chunk_uncompressed_size = blkx[offset+16,8] * 512
-			chunk_compressed_start = blkx[offset+24,8]
-			chunk_compressed_size = blkx[offset+32,8]
+		for piece in blkx.offset(204).pieces(40):
+			chunk_type = piece[0,4]
+			chunk_comment = piece[4,4]
+			chunk_uncompressed_start = piece[8,8] * 512
+			chunk_uncompressed_size = piece[16,8] * 512
+			chunk_compressed_start = piece[24,8]
+			chunk_compressed_size = piece[32,8]
 			if chunk_uncompressed_size:
 				chunks.append(DMGDriver.Chunk(
 					type = chunk_type,
