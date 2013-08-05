@@ -214,15 +214,10 @@ class DMGDriver(object):
 	def size(self):
 		return self.__size
 
-	def __getitem__(self, key):
+	def __get(self, start, stop):
 
-		if key.step is not None:
-			raise ValueError('step must be None')
-		if key.start is None or key.stop is None:
-			raise ValueError('start and stop must be both be specified')
-
-		first_byte = key.start
-		last_byte = key.stop - 1
+		first_byte = start
+		last_byte = stop - 1
 		first_chunk_index = bisect.bisect(self.__chunks, first_byte) - 1
 		last_chunk_index = bisect.bisect(self.__chunks, last_byte) - 1
 
@@ -236,6 +231,21 @@ class DMGDriver(object):
 		first_byte -= first_chunk.uoffset
 		last_byte -= first_chunk.uoffset
 		return uncompressed_data[first_byte:last_byte+1]
+
+	def __getitem__(self, key):
+		if isinstance(key, int):
+			return self.__get(key, key+1)
+		elif isinstance(key, slice):
+			if key.step is not None:
+				raise TypeError('slice step must be None')
+			if key.start is None or key.stop is None:
+				raise ValueError('start and stop must be both be specified')
+			return self.__get(key.start, key.stop)
+		else:
+			off, sz = key
+			data = self.__get(off, off + sz)
+			fmt = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
+			return struct.unpack('>' + fmt[sz], data)[0]
 	
 	def decompress_chunk(self, chunk):
 		compressed_data = self.__handle[chunk.coffset:chunk.coffset+chunk.csize]
