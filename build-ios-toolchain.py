@@ -15,6 +15,9 @@ import re
 import hashlib
 import struct
 import binascii
+import bisect
+import operator
+import zlib
 from xml.etree import ElementTree
 from getpass import getpass
 
@@ -30,6 +33,7 @@ except ImportError: # Python 2
 	from cStringIO import StringIO as BytesIO
 	input = raw_input
 	range = xrange
+	bytes = str
 
 try:
 	next
@@ -68,6 +72,8 @@ class HandleWrapper(object):
 		elif isinstance(key, slice):
 			if key.step is not None:
 				raise TypeError('slice step must be None')
+			if key.start is None or key.stop is None:
+				raise ValueError('start and stop must be both be specified')
 			self.__seek(key.start)
 			return self.__handle.read(key.stop - key.start)
 		else:
@@ -77,10 +83,17 @@ class HandleWrapper(object):
 			fmt = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 			return struct.unpack('>' + fmt[sz], data)[0]
 
-class DMGDriver(HandleWrapper):
+class DMGDriver(object):
+
+	__decompressors = {
+		0x00000001: lambda x: x,
+		0x80000005: lambda x: zlib.decompress(x),
+	}
 
 	class Chunk(object):
+
 		__slots__ = ['type', 'comment', 'uoffset', 'usize', 'coffset', 'csize']
+
 		def __init__(self, type, comment, uoffset, usize, coffset, csize):
 			self.type = type
 			self.comment = comment
@@ -89,16 +102,38 @@ class DMGDriver(HandleWrapper):
 			self.coffset = coffset
 			self.csize = csize
 
+		def __repr__(self):
+			return 'Chunk(type=%08x, comment=%d, uoffset=%d, usize=%d, coffset=%d, csize=%d)' % (
+				self.type,
+				self.comment,
+				self.uoffset,
+				self.usize,
+				self.coffset,
+				self.csize
+			)
+
+		def __compare(self, other, op):
+			if isinstance(other, int):
+				return op(self.uoffset, other)
+			else:
+				return op(self.uoffset, other.uoffset)
+
+		def __lt__(self, other):
+			return self.__compare(other, operator.lt)
+		def __gt__(self, other):
+			return self.__compare(other, operator.gt)
+
 	def __init__(self, handle, size):
 
 		logging.debug('initializing DMG driver')
-		super(DMGDriver, self).__init__(handle, size)
 
-		xml_offset = self[-512+216,8]
-		xml_size = self[-512+224,8]
+		handle = self.__handle = HandleWrapper(handle, size)
+
+		xml_offset = handle[-512+216,8]
+		xml_size = handle[-512+224,8]
 		logging.debug('DMG XML of size %d at offset %d', xml_size, xml_offset)
 
-		xml = self[xml_offset:xml_offset+xml_size]
+		xml = handle[xml_offset:xml_offset+xml_size]
 		info = self.parse_plist(xml)
 		blocks = info['resource-fork']['blkx']
 
@@ -111,13 +146,11 @@ class DMGDriver(HandleWrapper):
 			blkx[4,4] == 1 and
 			blkx[24,8] == 0
 		):
-			logging.error('unsupported mish block')
 			raise ValueError('unsupported mish block')
 		
 		nchunks = blkx[200,4]
 		logging.debug('DMG has %d chunks', nchunks)
 		if len(bdata) - 204 != nchunks * 40:
-			logging.error('bad mish size')
 			raise ValueError('bad mish size')
 	
 		chunks = self.__chunks = []
@@ -138,16 +171,44 @@ class DMGDriver(HandleWrapper):
 					csize = chunk_compressed_size
 				))
 
-		self.__size = max(chunk.uoffset + chunk.usize for chunk in chunks)
+		chunks.sort(key=lambda chunk: chunk.uoffset)
+		size = self.__size = chunks[-1].uoffset + chunks[-1].usize
+		logging.debug('DMG size is %d bytes', size)
 	
 	@property
 	def size(self):
 		return self.__size
+
+	def __getitem__(self, key):
+
+		if key.step is not None:
+			raise ValueError('step must be None')
+		if key.start is None or key.stop is None:
+			raise ValueError('start and stop must be both be specified')
+
+		first_byte = key.start
+		last_byte = key.stop - 1
+		first_chunk_index = bisect.bisect(self.__chunks, first_byte) - 1
+		last_chunk_index = bisect.bisect(self.__chunks, last_byte) - 1
+
+		uncompressed_data = []
+		for chunk_index in range(first_chunk_index, last_chunk_index + 1):
+			chunk = self.__chunks[chunk_index]
+			uncompressed_data.append(self.decompress_chunk(self.__chunks[chunk_index]))
+		uncompressed_data = bytes().join(uncompressed_data)
+
+		first_chunk = self.__chunks[first_chunk_index]
+		first_byte -= first_chunk.uoffset
+		last_byte -= first_chunk.uoffset
+		return uncompressed_data[first_byte:last_byte+1]
+	
+	def decompress_chunk(self, chunk):
+		compressed_data = self.__handle[chunk.coffset:chunk.coffset+chunk.csize]
+		return self.__decompressors[chunk.type](compressed_data)
 	
 	def parse_plist(self, xml):
 		tree = ElementTree.fromstring(xml)
 		if not (tree.tag == 'plist' and len(tree) == 1):
-			logging.error('bad DMG plist')
 			raise ValueError('bad DMG plist')
 		return self.parse_plist_obj(tree[0])
 
@@ -157,7 +218,6 @@ class DMGDriver(HandleWrapper):
 	def parse_plist_obj_dict(self, node):
 		ret = {}
 		if len(node) % 2 != 0:
-			logging.error('plist dict does not have even number of elements')
 			raise ValueError('bad DMG plist')
 		for keynode, valuenode in zip(node[0::2], node[1::2]):
 			ret[keynode.text] = self.parse_plist_obj(valuenode)
@@ -219,11 +279,12 @@ def run():
 	handle.seek(DMG_SIZE - 512)
 	koly = handle.read(512)
 	if hashlib.sha1(koly).hexdigest() != DMG_KOLY_SHA1:
-		logging.error('bad DMG identification block! wrong DMG file?')
 		raise Exception('bad DMG')
 
 	dmg = DMGDriver(handle, DMG_SIZE)
-	dmg.size
+	for offset in range(0, dmg.size, 4096):
+		print(len(dmg[offset:offset+4096]))
+		#sys.stdout.write(dmg[offset:offset+4096])
 
 def makedir(x):
 	try:
@@ -231,7 +292,6 @@ def makedir(x):
 		os.makedirs(x)
 	except OSError:
 		if not os.path.isdir(x):
-			logging.error('failed to create dir at %r', x)
 			raise
 
 def main(args):
