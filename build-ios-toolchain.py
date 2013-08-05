@@ -59,15 +59,19 @@ class HandleWrapper(object):
 		self.__handle = handle
 		self.__size = size
 		self.__position = None
+		self.__posdirty = True
 	
 	def __seek(self, pos):
 		if pos < 0:
 			pos = self.__size + pos
 		if self.__position != pos:
-			self.__handle.seek(pos)
+			self.__posdirty = True
 		self.__position = pos
 	
 	def __read(self, sz):
+		if self.__posdirty:
+			self.__handle.seek(self.__position)
+			self.__posdirty = False
 		data = self.__handle.read(sz)
 		self.__position += sz
 		return data
