@@ -71,6 +71,9 @@ class EasyMixin(object):
 			fmt = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 			return struct.unpack('>' + fmt[sz], data)[0]
 	
+	def offset(self, offset):
+		return OffsetFilter(self, offset)
+	
 class HandleWrapper(EasyMixin):
 
 	def __init__(self, handle):
@@ -113,6 +116,22 @@ class BytesWrapper(EasyMixin):
 
 	def _easysize(self):
 		return len(self.__bytes)
+
+class OffsetFilter(EasyMixin):
+
+	def __init__(self, em, offset=0):
+		self.__em = em
+		self.__offset = offset
+	
+	def offset(self, offset):
+		return OffsetFilter(self.__em, self.__offset + offset)
+	
+	def _easyget(self, start, stop):
+		offset = self.__offset
+		return self.__em[start+offset:stop+offset]
+	
+	def _easysize(self):
+		return self.__em._easysize() - self.__offset
 
 class CacheFilter(EasyMixin):
 
