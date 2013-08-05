@@ -120,8 +120,9 @@ class HandleWrapper(object):
 class DMGDriver(object):
 
 	__decompressors = {
-		0x00000001: lambda x: x,
-		0x80000005: lambda x: zlib.decompress(x),
+		0x00000001: lambda x, s: x,
+		0x00000002: lambda x, s: '\0'.encode('ascii') * s,
+		0x80000005: lambda x, s: zlib.decompress(x),
 	}
 
 	class Chunk(object):
@@ -238,7 +239,7 @@ class DMGDriver(object):
 	
 	def decompress_chunk(self, chunk):
 		compressed_data = self.__handle[chunk.coffset:chunk.coffset+chunk.csize]
-		return self.__decompressors[chunk.type](compressed_data)
+		return self.__decompressors[chunk.type](compressed_data, chunk.usize)
 	
 	def parse_plist(self, xml):
 		tree = ElementTree.fromstring(xml)
