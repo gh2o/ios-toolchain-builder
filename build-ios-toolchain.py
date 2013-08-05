@@ -26,11 +26,9 @@ logging.getLogger().setLevel(logging.DEBUG)
 try: # Python 3
 	from urllib.request import build_opener, HTTPRedirectHandler, HTTPCookieProcessor
 	from urllib.parse import urlencode
-	from io import BytesIO
 except ImportError: # Python 2
 	from urllib2 import build_opener, HTTPRedirectHandler, HTTPCookieProcessor
 	from urllib import urlencode
-	from cStringIO import StringIO as BytesIO
 	input = raw_input
 	range = xrange
 	bytes = str
@@ -94,6 +92,14 @@ class HandleWrapper(EasyMixin):
 	def _easyget(self, start, stop):
 		self.__seek(start)
 		return self.__read(stop - start)
+
+class BytesWrapper(EasyMixin):
+
+	def __init__(self, bytes):
+		self.__bytes = bytes
+	
+	def _easyget(self, start, stop):
+		return self.__bytes[start:stop]
 
 class CacheFilter(EasyMixin):
 
@@ -185,7 +191,7 @@ class DMGDriver(EasyMixin):
 
 		block = next(blk for blk in blocks if 'Apple_HFS' in blk['Name'])
 		bdata = block['Data']
-		blkx = HandleWrapper(BytesIO(bdata),len(bdata))
+		blkx = BytesWrapper(bdata)
 		
 		if not (
 			blkx[0,4] == 0x6D697368 and
