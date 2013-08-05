@@ -58,22 +58,21 @@ class HandleWrapper(object):
 	def __init__(self, handle, size):
 		self.__handle = handle
 		self.__size = size
-		self.__position = None
-		self.__posdirty = True
+		self.__virtualpos = None
+		self.__actualpos = None
 	
 	def __seek(self, pos):
 		if pos < 0:
 			pos = self.__size + pos
-		if self.__position != pos:
-			self.__posdirty = True
-		self.__position = pos
+		self.__virtualpos = pos
 	
 	def __read(self, sz):
-		if self.__posdirty:
-			self.__handle.seek(self.__position)
-			self.__posdirty = False
+		if self.__virtualpos != self.__actualpos:
+			self.__handle.seek(self.__virtualpos)
+			self.__actualpos = self.__virtualpos
 		data = self.__handle.read(sz)
-		self.__position += sz
+		self.__actualpos += sz
+		self.__virtualpos += sz
 		return data
 	
 	def __getitem__(self, key):
