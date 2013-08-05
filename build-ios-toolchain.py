@@ -53,7 +53,24 @@ class RedirectHandler(HTTPRedirectHandler):
 		return RedirectResponse(headers['Location'])
 	http_error_301 = http_error_302
 
-class HandleWrapper(object):
+class EasyMixin(object):
+
+	def __getitem__(self, key):
+		if isinstance(key, int):
+			return self._easyget(key, key+1)
+		elif isinstance(key, slice):
+			if key.step is not None:
+				raise TypeError('slice step must be None')
+			if key.start is None or key.stop is None:
+				raise ValueError('start and stop must be both be specified')
+			return self._easyget(key.start, key.stop)
+		else:
+			off, sz = key
+			data = self._easyget(off, off + sz)
+			fmt = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
+			return struct.unpack('>' + fmt[sz], data)[0]
+	
+class HandleWrapper(EasyMixin):
 
 	max_cache_objects = 64
 
@@ -98,26 +115,12 @@ class HandleWrapper(object):
 
 		self.__virtualpos += sz
 		return cacheitem.data[:sz]
-	
-	def __getitem__(self, key):
-		if isinstance(key, int):
-			self.__seek(key)
-			return self.__read(1)
-		elif isinstance(key, slice):
-			if key.step is not None:
-				raise TypeError('slice step must be None')
-			if key.start is None or key.stop is None:
-				raise ValueError('start and stop must be both be specified')
-			self.__seek(key.start)
-			return self.__read(key.stop - key.start)
-		else:
-			off, sz = key
-			self.__seek(off)
-			data = self.__read(sz)
-			fmt = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
-			return struct.unpack('>' + fmt[sz], data)[0]
 
-class DMGDriver(object):
+	def _easyget(self, start, stop):
+		self.__seek(start)
+		return self.__read(stop - start)
+	
+class DMGDriver(EasyMixin):
 
 	__decompressors = {
 		0x00000001: lambda x, s: x,
@@ -214,7 +217,7 @@ class DMGDriver(object):
 	def size(self):
 		return self.__size
 
-	def __get(self, start, stop):
+	def _easyget(self, start, stop):
 
 		first_byte = start
 		last_byte = stop - 1
@@ -232,21 +235,6 @@ class DMGDriver(object):
 		last_byte -= first_chunk.uoffset
 		return uncompressed_data[first_byte:last_byte+1]
 
-	def __getitem__(self, key):
-		if isinstance(key, int):
-			return self.__get(key, key+1)
-		elif isinstance(key, slice):
-			if key.step is not None:
-				raise TypeError('slice step must be None')
-			if key.start is None or key.stop is None:
-				raise ValueError('start and stop must be both be specified')
-			return self.__get(key.start, key.stop)
-		else:
-			off, sz = key
-			data = self.__get(off, off + sz)
-			fmt = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
-			return struct.unpack('>' + fmt[sz], data)[0]
-	
 	def decompress_chunk(self, chunk):
 		compressed_data = self.__handle[chunk.coffset:chunk.coffset+chunk.csize]
 		return self.__decompressors[chunk.type](compressed_data, chunk.usize)
