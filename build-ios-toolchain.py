@@ -172,87 +172,6 @@ class DMGDriver(HandleWrapper):
 	def parse_plist_obj_data(self, node):
 		return binascii.a2b_base64(node.text)
 
-class Step(object):
-
-	def __init__(self):
-		self.step_name = type(self).__name__
-		self.info_path = os.path.join(config.infodir, self.step_name)
-
-	def get_requirements(self):
-		return []
-
-	def get_tag(self):
-		return ''
-
-	def needs_rebuild(self):
-		return False
-	
-	def read_info(self):
-		try:
-			with open(self.info_path) as f:
-				timestamp = float(f.readline().strip())
-				tag = f.read().strip()
-				return (timestamp, tag)
-		except:
-			return (None, None)
-	
-	def write_info(self, timestamp, tag):
-		with open(self.info_path, 'w') as f:
-			f.write('%f\n' % timestamp)
-			f.write('%s\n' % tag)
-	
-	def maybe_build(self):
-		logging.debug('checking if %s needs to be rebuilt' % self.step_name)
-		timestamp, tag = self.read_info()
-		need_build = (
-			self.needs_rebuild() or
-			timestamp is None or
-			tag != self.get_tag()
-		)
-		for req in self.get_requirements():
-			req.maybe_build()
-			req_timestamp, req_tag = req.read_info()
-			need_build = need_build or timestamp < req_timestamp
-		if need_build:
-			logging.debug('rebuilding %s' % self.step_name)
-			self.build()
-			self.write_info(time.time(), self.get_tag())
-		else:
-			logging.debug('%s is up-to-date' % self.step_name)
-	
-	def build(self):
-		pass
-
-class Headers(Step):
-
-	def get_tag(self):
-		return DMG_KOLY_SHA1
-
-	def build(self):
-
-		if config.xcodedmg:
-			handle = open(config.xcodedmg, 'rb')
-		else:
-			appleauth()
-			raise 1
-
-		handle.seek(DMG_SIZE - 512)
-		koly = handle.read(512)
-		if hashlib.sha1(koly).hexdigest() != DMG_KOLY_SHA1:
-			logging.error('bad DMG identification block! wrong DMG file?')
-			raise Exception('bad DMG')
-
-		dmg = DMGDriver(handle, DMG_SIZE)
-		dmg.size
-
-		raise 1
-
-class Toolchain(Step):
-	def get_tag(self):
-		return '%f' % os.path.getmtime(__file__)
-	def get_requirements(self):
-		return [Headers()]
-
 def appleauth():
 
 	print('Please enter your Apple ID and password.')
@@ -286,6 +205,26 @@ def appleauth():
 		else:
 			print('Bad Apple ID or password. Is this account a registered developer account?')
 
+config = Config()
+config.xcodedmg = os.path.expanduser('~/Downloads/xcode4630916281a.dmg')
+
+def run():
+
+	if config.xcodedmg:
+		handle = open(config.xcodedmg, 'rb')
+	else:
+		appleauth()
+		raise 1
+
+	handle.seek(DMG_SIZE - 512)
+	koly = handle.read(512)
+	if hashlib.sha1(koly).hexdigest() != DMG_KOLY_SHA1:
+		logging.error('bad DMG identification block! wrong DMG file?')
+		raise Exception('bad DMG')
+
+	dmg = DMGDriver(handle, DMG_SIZE)
+	dmg.size
+
 def makedir(x):
 	try:
 		logging.debug('creating dir at %r', x)
@@ -295,25 +234,16 @@ def makedir(x):
 			logging.error('failed to create dir at %r', x)
 			raise
 
-config = Config()
-config.xcodedmg = os.path.expanduser('~/Downloads/xcode4630916281a.dmg')
-
 def main(args):
 
-	default_prefix = os.path.expanduser('~/ios-toolchain')
-	prefix = '' #input('Path to toolchain [%s]: ' % default_prefix)
-	prefix = config.prefix = prefix or default_prefix
+	if len(args) != 1:
+		print('Usage: %s <output directory>' % sys.argv[0])
+		return 1
 
-	config.infodir = os.path.join(prefix, 'info')
-	config.builddir = os.path.join(prefix, 'build')
-
-	config.opener = build_opener(RedirectHandler(), HTTPCookieProcessor())
-
-	makedir(config.infodir)
-	makedir(config.builddir)
-
-	toolchain = Toolchain()
-	toolchain.maybe_build()
+	config.prefix = args[0]	
+	makedir(config.prefix)
+	run()
+	return 0
 
 if __name__ == "__main__":
-	main(sys.argv[1:])
+	sys.exit(main(sys.argv[1:]))
