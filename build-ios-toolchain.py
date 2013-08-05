@@ -4,7 +4,6 @@ from __future__ import with_statement
 
 DMG_URL = 'https://developer.apple.com/downloads/download.action'
 DMG_PATH = "Developer_Tools/xcode_4.6.3/xcode4630916281a.dmg"
-DMG_SIZE = 1723816316
 DMG_KOLY_SHA1 = "f21001cc2b7eb230003250945156b1b6354ccd77"
 
 import os
@@ -339,8 +338,7 @@ def run():
 
 	dmg = DMGDriver(em)
 	for offset in range(0, dmg.size, 32768):
-		dmg[offset:offset+32768]
-		#sys.stdout.write(dmg[offset:offset+4096])
+		sys.stdout.buffer.write(dmg[offset:offset+32768])
 
 def makedir(x):
 	try:
