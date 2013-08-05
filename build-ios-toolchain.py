@@ -111,6 +111,9 @@ class BytesWrapper(EasyMixin):
 	def _easyget(self, start, stop):
 		return self.__bytes[start:stop]
 
+	def _easysize(self):
+		return len(self.__bytes)
+
 class CacheFilter(EasyMixin):
 
 	class Item(object):
