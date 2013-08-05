@@ -23,10 +23,13 @@ logging.getLogger().setLevel(logging.DEBUG)
 try: # Python 3
 	from urllib.request import build_opener, HTTPRedirectHandler, HTTPCookieProcessor
 	from urllib.parse import urlencode
+	from io import BytesIO
 except ImportError: # Python 2
 	from urllib2 import build_opener, HTTPRedirectHandler, HTTPCookieProcessor
 	from urllib import urlencode
+	from cStringIO import StringIO as BytesIO
 	input = raw_input
+	range = xrange
 
 try:
 	next
@@ -76,6 +79,16 @@ class HandleWrapper(object):
 
 class DMGDriver(HandleWrapper):
 
+	class Chunk(object):
+		__slots__ = ['type', 'comment', 'uoffset', 'usize', 'coffset', 'csize']
+		def __init__(self, type, comment, uoffset, usize, coffset, csize):
+			self.type = type
+			self.comment = comment
+			self.uoffset = uoffset
+			self.usize = usize
+			self.coffset = coffset
+			self.csize = csize
+
 	def __init__(self, handle, size):
 
 		logging.debug('initializing DMG driver')
@@ -91,7 +104,45 @@ class DMGDriver(HandleWrapper):
 
 		block = next(blk for blk in blocks if 'Apple_HFS' in blk['Name'])
 		bdata = block['Data']
-		print(len(bdata))
+		blkx = HandleWrapper(BytesIO(bdata),len(bdata))
+		
+		if not (
+			blkx[0,4] == 0x6D697368 and
+			blkx[4,4] == 1 and
+			blkx[24,8] == 0
+		):
+			logging.error('unsupported mish block')
+			raise ValueError('unsupported mish block')
+		
+		nchunks = blkx[200,4]
+		logging.debug('DMG has %d chunks', nchunks)
+		if len(bdata) - 204 != nchunks * 40:
+			logging.error('bad mish size')
+			raise ValueError('bad mish size')
+	
+		chunks = self.__chunks = []
+		for offset in range(204, len(bdata), 40):
+			chunk_type = blkx[offset,4]
+			chunk_comment = blkx[offset+4,4]
+			chunk_uncompressed_start = blkx[offset+8,8] * 512
+			chunk_uncompressed_size = blkx[offset+16,8] * 512
+			chunk_compressed_start = blkx[offset+24,8]
+			chunk_compressed_size = blkx[offset+32,8]
+			if chunk_uncompressed_size:
+				chunks.append(DMGDriver.Chunk(
+					type = chunk_type,
+					comment = chunk_comment,
+					uoffset = chunk_uncompressed_start,
+					usize = chunk_uncompressed_size,
+					coffset = chunk_compressed_start,
+					csize = chunk_compressed_size
+				))
+
+		self.__size = max(chunk.uoffset + chunk.usize for chunk in chunks)
+	
+	@property
+	def size(self):
+		return self.__size
 	
 	def parse_plist(self, xml):
 		tree = ElementTree.fromstring(xml)
