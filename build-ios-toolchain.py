@@ -58,28 +58,35 @@ class HandleWrapper(object):
 	def __init__(self, handle, size):
 		self.__handle = handle
 		self.__size = size
+		self.__position = None
 	
-	def __seek(self, off):
-		if off < 0:
-			self.__handle.seek(self.__size + off)
-		else:
-			self.__handle.seek(off)
+	def __seek(self, pos):
+		if pos < 0:
+			pos = self.__size + pos
+		if self.__position != pos:
+			self.__handle.seek(pos)
+		self.__position = pos
+	
+	def __read(self, sz):
+		data = self.__handle.read(sz)
+		self.__position += sz
+		return data
 	
 	def __getitem__(self, key):
 		if isinstance(key, int):
 			self.__seek(key)
-			return self.__handle.read(1)
+			return self.__read(1)
 		elif isinstance(key, slice):
 			if key.step is not None:
 				raise TypeError('slice step must be None')
 			if key.start is None or key.stop is None:
 				raise ValueError('start and stop must be both be specified')
 			self.__seek(key.start)
-			return self.__handle.read(key.stop - key.start)
+			return self.__read(key.stop - key.start)
 		else:
 			off, sz = key
 			self.__seek(off)
-			data = self.__handle.read(sz)
+			data = self.__read(sz)
 			fmt = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 			return struct.unpack('>' + fmt[sz], data)[0]
 
@@ -271,7 +278,7 @@ config.xcodedmg = os.path.expanduser('~/Downloads/xcode4630916281a.dmg')
 def run():
 
 	if config.xcodedmg:
-		handle = open(config.xcodedmg, 'rb')
+		handle = open(config.xcodedmg, 'rb', 0)
 	else:
 		appleauth()
 		raise 1
@@ -282,8 +289,8 @@ def run():
 		raise Exception('bad DMG')
 
 	dmg = DMGDriver(handle, DMG_SIZE)
-	for offset in range(0, dmg.size, 4096):
-		print(len(dmg[offset:offset+4096]))
+	for offset in range(0, dmg.size, 32768):
+		dmg[offset:offset+32768]
 		#sys.stdout.write(dmg[offset:offset+4096])
 
 def makedir(x):
