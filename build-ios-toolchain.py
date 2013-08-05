@@ -59,9 +59,13 @@ class EasyMixin(object):
 		elif isinstance(key, slice):
 			if key.step is not None:
 				raise TypeError('slice step must be None')
-			if key.start is None or key.stop is None:
-				raise ValueError('start and stop must be both be specified')
-			return self._easyget(key.start, key.stop)
+			start = key.start
+			if start is None:
+				start = 0
+			stop = key.stop
+			if stop is None:
+				stop = self._easysize()
+			return self._easyget(start, stop)
 		else:
 			off, sz = key
 			data = self._easyget(off, off + sz)
@@ -70,9 +74,9 @@ class EasyMixin(object):
 	
 class HandleWrapper(EasyMixin):
 
-	def __init__(self, handle, size):
+	def __init__(self, handle):
 		self.__handle = handle
-		self.__size = size
+		self.__size = None
 		self.__virtualpos = None
 		self.__actualpos = None
 
@@ -92,6 +96,13 @@ class HandleWrapper(EasyMixin):
 	def _easyget(self, start, stop):
 		self.__seek(start)
 		return self.__read(stop - start)
+
+	def _easysize(self):
+		if self.__size is None:
+			self.__handle.seek(0, os.SEEK_END)
+			self.__size = self.__handle.tell()
+			self.__actualpos = None
+		return self.__size
 
 class BytesWrapper(EasyMixin):
 
@@ -175,17 +186,16 @@ class DMGDriver(EasyMixin):
 		def __gt__(self, other):
 			return self.__compare(other, operator.gt)
 
-	def __init__(self, handle, size):
+	def __init__(self, em):
 
 		logging.debug('initializing DMG driver')
+		self.__em = em
 
-		handle = self.__handle = HandleWrapper(handle, size)
-
-		xml_offset = handle[-512+216,8]
-		xml_size = handle[-512+224,8]
+		xml_offset = em[-512+216,8]
+		xml_size = em[-512+224,8]
 		logging.debug('DMG XML of size %d at offset %d', xml_size, xml_offset)
 
-		xml = handle[xml_offset:xml_offset+xml_size]
+		xml = em[xml_offset:xml_offset+xml_size]
 		info = self.parse_plist(xml)
 		blocks = info['resource-fork']['blkx']
 
@@ -250,7 +260,7 @@ class DMGDriver(EasyMixin):
 		return uncompressed_data[first_byte:last_byte+1]
 
 	def decompress_chunk(self, chunk):
-		compressed_data = self.__handle[chunk.coffset:chunk.coffset+chunk.csize]
+		compressed_data = self.__em[chunk.coffset:chunk.coffset+chunk.csize]
 		return self.__decompressors[chunk.type](compressed_data, chunk.usize)
 	
 	def parse_plist(self, xml):
@@ -318,17 +328,16 @@ config.xcodedmg = os.path.expanduser('~/Downloads/xcode4630916281a.dmg')
 def run():
 
 	if config.xcodedmg:
-		handle = open(config.xcodedmg, 'rb', 0)
+		em = HandleWrapper(open(config.xcodedmg, 'rb', 0))
 	else:
 		appleauth()
 		raise 1
 
-	handle.seek(DMG_SIZE - 512)
-	koly = handle.read(512)
+	koly = em[-512:]
 	if hashlib.sha1(koly).hexdigest() != DMG_KOLY_SHA1:
 		raise Exception('bad DMG')
 
-	dmg = DMGDriver(handle, DMG_SIZE)
+	dmg = DMGDriver(em)
 	for offset in range(0, dmg.size, 32768):
 		dmg[offset:offset+32768]
 		#sys.stdout.write(dmg[offset:offset+4096])
