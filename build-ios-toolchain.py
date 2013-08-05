@@ -71,14 +71,16 @@ class EasyMixin(object):
 			fmt = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 			return struct.unpack('>' + fmt[sz], data)[0]
 	
-	def offset(self, offset):
-		return OffsetFilter(self, offset)
+	def offset(self, offset, size=None):
+		if size is None:
+			size = self._easysize() - offset
+		return OffsetFilter(self, offset, size)
 
 	def pieces(self, size, count=None):
 		if count is None:
 			count = self._easysize() // size
 		for offset in range(0, size * count, size):
-			yield self.offset(offset)
+			yield self.offset(offset,size)
 	
 class HandleWrapper(EasyMixin):
 
@@ -125,19 +127,22 @@ class BytesWrapper(EasyMixin):
 
 class OffsetFilter(EasyMixin):
 
-	def __init__(self, em, offset=0):
+	def __init__(self, em, offset, size):
 		self.__em = em
 		self.__offset = offset
+		self.__size = size
 	
-	def offset(self, offset):
-		return OffsetFilter(self.__em, self.__offset + offset)
+	def offset(self, offset, size=None):
+		if size is None:
+			size = self.__size - offset
+		return OffsetFilter(self.__em, self.__offset + offset, size)
 	
 	def _easyget(self, start, stop):
 		offset = self.__offset
 		return self.__em[start+offset:stop+offset]
 	
 	def _easysize(self):
-		return self.__em._easysize() - self.__offset
+		return self.__size
 
 class CacheFilter(EasyMixin):
 
