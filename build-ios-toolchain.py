@@ -338,6 +338,10 @@ class HFSDriver(object):
 			raise ValueError('unsupported/bad HFS+ volume')
 
 		block_size = headem[40,4]
+		primary_forks = headem.offset(112).pieces(80)
+		for n, fork in enumerate(primary_forks):
+			open('/tmp/fork%d' % n, 'wb').write(fork[:])
+
 		print(block_size)
 		raise 1
 
