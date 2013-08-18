@@ -54,6 +54,8 @@ class EasyMixin(object):
 
 	def __getitem__(self, key):
 		if isinstance(key, int):
+			if key < 0:
+				key += self._easysize()
 			return self._easyget(key, key+1)
 		elif isinstance(key, slice):
 			if key.step is not None:
@@ -64,6 +66,10 @@ class EasyMixin(object):
 			stop = key.stop
 			if stop is None:
 				stop = self._easysize()
+			if start < 0:
+				start += self._easysize()
+			if stop < 0:
+				stop += self._easysize()
 			return self._easyget(start, stop)
 		else:
 			off, sz = key
@@ -177,7 +183,7 @@ class CacheFilter(EasyMixin):
 		
 		return item.data[:sz]
 	
-class DMGDriver(EasyMixin):
+class DMGFilter(EasyMixin):
 
 	__decompressors = {
 		0x00000001: lambda x, s: x,
@@ -256,7 +262,7 @@ class DMGDriver(EasyMixin):
 			chunk_compressed_start = piece[24,8]
 			chunk_compressed_size = piece[32,8]
 			if chunk_uncompressed_size:
-				chunks.append(DMGDriver.Chunk(
+				chunks.append(DMGFilter.Chunk(
 					type = chunk_type,
 					comment = chunk_comment,
 					uoffset = chunk_uncompressed_start,
@@ -266,7 +272,7 @@ class DMGDriver(EasyMixin):
 				))
 
 		chunks.sort(key=lambda chunk: chunk.uoffset)
-		size = self.__size = chunks[-1].uoffset + chunks[-1].usize
+		size = self.__size = blkx[16,8] * 512
 		logging.debug('DMG size is %d bytes', size)
 	
 	@property
@@ -338,9 +344,13 @@ class HFSDriver(object):
 			raise ValueError('unsupported/bad HFS+ volume')
 
 		block_size = headem[40,4]
+
 		primary_forks = headem.offset(112).pieces(80)
-		for n, fork in enumerate(primary_forks):
-			open('/tmp/fork%d' % n, 'wb').write(fork[:])
+		allocation_file = next(primary_forks)
+		extents_file = next(primary_forks)
+		catalog_file = next(primary_forks)
+		attributes_file = next(primary_forks)
+		startup_file = next(primary_forks)
 
 		print(block_size)
 		raise 1
@@ -393,7 +403,7 @@ def run():
 	if hashlib.sha1(koly).hexdigest() != DMG_KOLY_SHA1:
 		raise Exception('bad DMG')
 
-	dmg = DMGDriver(em)
+	dmg = DMGFilter(em)
 	hfs = HFSDriver(dmg)
 
 def makedir(x):
