@@ -73,6 +73,8 @@ class EasyMixin(object):
 			return self._easyget(start, stop)
 		else:
 			off, sz = key
+			if off < 0:
+				off += self._easysize()
 			data = self._easyget(off, off + sz)
 			fmt = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 			return struct.unpack('>' + fmt[sz], data)[0]
@@ -150,6 +152,7 @@ class OffsetFilter(EasyMixin):
 	def _easysize(self):
 		return self.__size
 
+'''
 class CacheFilter(EasyMixin):
 
 	class Item(object):
@@ -182,6 +185,7 @@ class CacheFilter(EasyMixin):
 		self.__clean()
 		
 		return item.data[:sz]
+'''
 	
 class DMGFilter(EasyMixin):
 
@@ -332,6 +336,111 @@ class DMGFilter(EasyMixin):
 
 class HFSDriver(object):
 
+	class File(EasyMixin):
+
+		def __init__(self, hfs, forkdata):
+			self.__hfs = hfs
+			self.__logical_size = forkdata[0,8]
+			self.__total_blocks = forkdata[12,4]
+			self.__blocks = []
+			for extent in forkdata.offset(16).pieces(8):
+				start_block = extent[0,4]
+				block_count = extent[4,4]
+				self.__blocks.extend(range(start_block, start_block + block_count))
+
+		def __retrieve_block(self, blknum):
+			while blknum >= len(self.__blocks):
+				raise 123
+			return self.__blocks[blknum]
+	
+		def  _easyget(self, start, stop):
+			hfsblksz = self.__hfs.block_size
+			data = []
+			while start < stop:
+				blknum = self.__retrieve_block(start // hfsblksz)
+				blkoff = start % hfsblksz
+				blksz = min(hfsblksz - blkoff, stop - start)
+				emoff = blknum * hfsblksz + blkoff
+				data.append(self.__hfs.em[emoff:emoff+blksz])
+				start += blksz
+			return bytes().join(data)
+
+		def _easysize(self):
+			return self.__logical_size
+
+	class BTree(object):
+
+		class Record(object):
+			def __init__(self, node, start, stop):
+				rem = BytesWrapper(node.em[start:stop])
+				keylen = rem[0,2]
+				self.key = rem[2:2+keylen]
+				self.data = rem[2+keylen:]
+				self.node = node
+
+		class DataRecord(Record):
+			pass
+
+		class PointerRecord(Record):
+			def __init__(self, *args, **kwargs):
+				HFSDriver.BTree.Record.__init__(self, *args, **kwargs)
+				self.__target_node = BytesWrapper(self.data)[0,4]
+			target_node = property(lambda s: s.node.btree.Node(s.node.btree, s.__target_node))
+		
+		class Node(object):
+
+			def __init__(self, btree, nodenum):
+
+				nodesz = btree.node_size
+				nodeoff = nodenum * nodesz
+
+				self.__btree = btree
+				self.__em = em = BytesWrapper(btree.em[nodeoff:nodeoff+nodesz])
+
+				self.__flink = em[0,4]
+				self.__blink = em[4,4]
+				self.__kind = em[8,1]
+
+				numrecords = em[10,2]
+				recoffsets = []
+				for recnum in range(numrecords):
+					recoffoff = (recnum + 1) * -2
+					recoffsets.append(em[recoffoff,2])
+
+				recordtype = {
+					0: btree.PointerRecord,
+					255: btree.DataRecord,
+				}[self.__kind]
+
+				records = []
+				recstarts = recoffsets
+				recstops = recoffsets[1:] + [nodesz + numrecords * -2]
+				for recstart, recstop in zip(recstarts, recstops):
+					records.append(recordtype(self, recstart, recstop))
+
+			em = property(lambda s: s.__em)
+			btree = property(lambda s: s.__btree)
+
+		def __init__(self, hfs, em):
+			# node header
+			self.__em = em
+			headem = BytesWrapper(em[14:128])
+			self.__root_node = headem[2,4]
+			self.__node_size = headem[18,2]
+
+		em = property(lambda s: s.__em)
+		root_node = property(lambda s: s.Node(s, s.__root_node))
+		node_size = property(lambda s: s.__node_size)
+
+	class Extents(BTree):
+		def __init__(self, *args, **kwargs):
+			HFSDriver.BTree.__init__(self, *args, **kwargs)
+	
+	class Catalog(BTree):
+		def __init__(self, *args, **kwargs):
+			HFSDriver.BTree.__init__(self, *args, **kwargs)
+			self.root_node
+
 	def __init__(self, em):
 
 		self.__em = em
@@ -343,17 +452,23 @@ class HFSDriver(object):
 		):
 			raise ValueError('unsupported/bad HFS+ volume')
 
-		block_size = headem[40,4]
+		self.__block_size = block_size = headem[40,4]
 
-		primary_forks = headem.offset(112).pieces(80)
-		allocation_file = next(primary_forks)
-		extents_file = next(primary_forks)
-		catalog_file = next(primary_forks)
-		attributes_file = next(primary_forks)
-		startup_file = next(primary_forks)
+		(
+			self.__allocation_file,
+			self.__extents_file,
+			self.__catalog_file,
+			self.__attributes_file,
+			self.__startup_file
+		) = (HFSDriver.File(self, fork) for fork in headem.offset(112).pieces(80))
 
-		print(block_size)
+		self.__extents = HFSDriver.Extents(self, self.__extents_file)
+		self.__catalog = HFSDriver.Catalog(self, self.__catalog_file)
+
 		raise 1
+
+	em = property(lambda s: s.__em)
+	block_size = property(lambda s: s.__block_size)
 
 def appleauth():
 
