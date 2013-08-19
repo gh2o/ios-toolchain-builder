@@ -457,10 +457,15 @@ class HFSDriver(object):
 				raise ValueError('bad record on file')
 			self.__cnid = em[8,4]
 
+			self.__admin_flags = em[40,1]
+			self.__owner_flags = em[41,1]
+
 		record = property(lambda s: s.__record)
 		parent = property(lambda s: s.__parent)
 		name = property(lambda s: s.__name)
 		cnid = property(lambda s: s.__cnid)
+		admin_flags = property(lambda s: s.__admin_flags)
+		owner_flags = property(lambda s: s.__owner_flags)
 
 		def __repr__(self):
 			return '<%s name=%r>' % (self.__class__.__name__, self.name)
@@ -494,13 +499,13 @@ class HFSDriver(object):
 				records.append(rec)
 				rec = rec.next_record
 
-			contents = []
+			contents = {}
 			for rec in records:
-				rtype = BytesWrapper(rec.data)[0,2]
-				contents.append({
+				ff = {
 					0x0001: HFSDriver.Folder,
 					0x0002: HFSDriver.File,
-				}[rtype](rec, self))
+				}[BytesWrapper(rec.data)[0,2]](rec, self)
+				contents[ff.name] = ff
 			
 			return contents
 
@@ -716,6 +721,12 @@ class HFSDriver(object):
 		record = self.__catalog.find_record_for_key(key)
 		return self.Folder(record, None)
 
+	def get(self, path):
+		ff = self.root_folder
+		for component in path:
+			ff = ff.contents[component]
+		return ff
+
 def appleauth():
 
 	print('Please enter your Apple ID and password.')
@@ -766,8 +777,9 @@ def run():
 
 	dmg = DMGFilter(em)
 	hfs = HFSDriver(dmg)
-
-	print(hfs.root_folder.full_path)
+	
+	fl = hfs.get(['Xcode.app','Contents','Developer','Platforms','iPhoneOS.platform',
+		'Developer','SDKs','iPhoneOS6.1.sdk', 'usr', 'include', 'stdio.h'])
 
 def makedir(x):
 	try:
