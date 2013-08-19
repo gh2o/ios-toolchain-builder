@@ -31,11 +31,87 @@ except ImportError: # Python 2
 	input = raw_input
 	range = xrange
 	bytes = str
+	str = unicode
+	chr = unichr
 
 try:
 	next
 except NameError: # Python 2.5
 	next = lambda x: x.next()
+
+lower_case_table = list(struct.unpack('>2816H', zlib.decompress(binascii.a2b_base64(
+"""
+eNrt11PwmEuTB+Ce/0zHmNhJd2yc2LZtJyc+sW3b1olt27Zt2+red8+ytr5afLU3W7X93M3Ub6qr
+pm/aQAgAWHCA8LcqFPznFRrCwP/X/80KC+FAFUwwAv80AKH++s5/PA4PESAiRILI4CEKRIVoEB1i
+QEyIBbEhDsSFeBAfEkBCSAQEDIkhCSSFZJAcUkBKSAWpIQ2khXSQHjJARsgEv0FmyAJZIRtkhxyQ
+E3JBbsgDeSEf5IcC0BAaQWNoAk3hd2gGzaEFtIRW0BrawB/QFtpBe+gAHaETdIYu0BW6QXfoAbWh
+DtSFelAfGvxd+Z7QC3pDH+gL/aA/DICBMAgGwxAYCsNgOIyAkTAKRsMYGAvjYDxMgIkwCSbDFJgK
+02A6zICZMAtmwxyYC/NgPiyAhfAnLILFsASWwjJYDitgJayC1bAG1sI6WA8bYCNsgs2wBbbCNtgO
+O2An7ILdsAf2wj7YDwfgIByCx3AEjsIxOA4n4CScgtNwBt7COTgPF+AiXILLcAW+wjW4DjfgJtwC
+gTtwF+7BfXgAD+FRkH8CT+EZPIcX8BJewWt4E+TfwXv4AB/hE3yGL0H+G3yHH/ATfgV5NWCMCTHW
+OIMmlAltwpiwJpwJbyKYiCaSiWyiBKKaaCa6iWFimlgmtolj4pp4Jr5JYBKaRIYMm8QmiUlqkpkU
+gZQmlUlt0pi0Jp1JbzKYjCaTyRzIYrKabCa7yWFymlwmt8lj8pp8pkCgUKCwKWKKmmKmuClhSprS
+gTKmrClnypsKpqKpHKhiqppqprqpYWqaWqa2qWPqmnqmvmlgGppGprFpYpqaZoHmpoVpaVqZ1qaN
++cO0Ne1Me9PBdDSdTGfTxXQ13Ux308P0NL1Mb9PH9DX9QiqbgYHBZnBIFTPMDAupFlLdjAqMNrdC
+aobUNhPMhJAGIY3N5JAWIc3N9MAMMzOkbUgHMyeks5ln5puFgUWBxWapWRoy0Cw3K8wqsypkmFlj
+1oaMCBlpNgY2m80hE8y2wHazw+wK7DZ7zF6zz+w3B8zhvxz7y8m/nDKnzRlz1pwz580Fc9FcMpfN
+FXPVXDPXzQ1z09wyt80dc9fcM/fNA/Mo8Ng8MU/NM/PcvDAvzSvz2rwxb82Hv3w0n8xn88V8Nd/M
+d/PD/DS/jBi1YI0NsdY6izaUDW3D2LA2nA1vI9iINpKNbL2NYqPaaDa6jWFj2lg2to1j49p4Nr5N
+YBPaRJYs28Q2iU1qk9nkNoVNaVPZ1DaNTWvT2fQ2g81oM9nfbGabxWa12Wx2m8PmtLlsbpvH5rX5
+bH5bwBa0hWxhW8QWtcVscVvClrSlbGlbxpa15Wx5W8FWtJVsZVvFVrXVbHVbw9a0tWxtW8fWtfVs
+fdvANrSNbGPbxDa1v9tmtrltYVvaVra1bWP/sG1tO9vedrAdbSfb2XaxXW032932sD1tL9vb9rF9
+bT/b3w6wA+0gO9gOsUPtMDvcjrAj7Sg72o6xY+04u86utxvsRrvJbrZb7Fa7zW63O+xOu8vutnvs
+XrvPLrAH7EF7yB62R+xRe8wutyvsSrvKrrZr7Nr/Rn7/f8gftyfsSXvKnrZn7Fl7zp63F+xFe8le
+tlfsVXvNXrc37E17y962d+xde88+CDwKPAk8C7wIvAq8Cby17+x7+8F+tJ/sZ/vFfrXf7Hf7w/60
+v6xYdeCMq+Ssq+KqumoutKvharparraL4CK6SK6+y+gyud9cZpfFZXXZXHaXw8VxuVxul8fldflc
+flfAFXSFXGFXxBV1xVxxV8KVdKVcaVfGlXXlXPm/kc/5P8pXcBWD/ir/c3/V/7W/Oq6uqxf01zDQ
+ONA00CzQItAq0CbQNtA+0DHQOdDFdXXdAz0DvQN9A/0DA9xAN8gNdkPcUDfMDXcj3Eg3yo12Y9xY
+Nz4wMTA5MDUwPTAzMDswNzA/sDCwKLAksCywIrAqsCawLrAhsCmwJbAtsCOwK7AnsNftc/vdwcAh
+d9gdDRxzx93JwCl32p1xZ905d95dcBfdJXfZXXFX3TV33d1wN90td9vdcXfdPXffPXAP3SP32D1x
+T90z99y9cC/dK/favXFv3Tv33n1wH90n99l9cV/dN/fd/XA/3S8nThHQYAhadIgYCkNjGAyL4TA8
+RsCIGAkjo8coGBWjYXSMgTExFsbGOBgX42F8TIAJMRESMibGJJgUk2FyTIEpMRWmxjSYFtNhesyA
+GbEhNsLG2ASb4u/YDJtjC2yJrbA1tsE/sC22w/bYATtiJ+yMXbArdsPu2AN7Yi/sjX2wL/bD/jgA
+B+IgHIxDsDrWwJpYC2tjHayL9bA+NvhffX8oDsPhOAJH4igcjWNwLI7D8TgBJ+IknIxTcCpOw+k4
+A2fiLJyNc3AuzsP5uAAX4p+4CBfjElyKy3A5rsCVuApX4xpci+twPW7AjbgJN+MW3IrbcDvuwJ24
+C3fjHtyL+3A/HsCDeAgP4xE8isfwOJ7Ak3gKT+MZPIvn8DxewIt4CS/jFbyK1/A63sCbeAtv4x28
+i/fwPj7Ah/gIH+MTfIrP8Dm+wJf4Cl/jG3yL7/A9fsCP+Ak/4xf8it/wO/7An/gLBdWDNz7EW+88
++lA+tA/jw/pwPryP4CP6SD6y9z6Kj+qj+eg+ho/pY/nYPo6P6+P5+D6BT+gTefLsE/skPqlP5pP7
+FD6lT+VT+zQ+rU/n0/sMPqPP5H/zmX0Wn9Vn89l9Dp/T5/K5fR6f1+fz+X0BX9AX8oV9EV/UF/PF
+fQlf0pfypX0ZX9aX8+V9BV/RV/KVfRVf1Vfz1X0NX9PX8rV9HV/X1/P1fQPf0DfyjX0T39T/7pv5
+5r6Fb+lb+da+jf/Dt/XtfHvfwXf0nXxn38V39d18d9/D9/S9fG/fx/f1/Xx/P8AP9IP8YD/ED/XD
+/HA/wo/0o/xoP8aP9eP8eD/BT/ST/GQ/xU/10/x0P8PP9LP8bD/Hz/Vn/Tl/3l/wF/0lf9lf8Vf9
+NX/d3/A3/S1/29/xd/09f98/8A/9I//YP/FP/TP/3L/wL/0r/9q/8W/9O//ef/Af/Sd/2B/xR/0x
+f9yf8Cf9KX/an/lfff+z/+K/+m/+u//hf/pfXrwSkKEQsuQIKRSFpjAUlsJR+H/ZEchTFIpK0Sg6
+xaCYFItiUxyKS/EoPiWghJSIiJgSUxJKSskoOaWglJTq3zYMykAZKRP9RpkpC2WlbJSdclBOykW5
+KQ/lpXyUnwpQQSpEhakIFaViVJxKUEkqRaWpDJWlclSeKlBFqkSVqQpVpWpUnWpQTapFtakO1aV6
+VJ8aUENqRI2pCTWl36kZNacW/37HoXbUnjpQR+pEnakLdaVu1J16UE/qRb2pD/WlftSfBtBAGkSD
+aQgNpWE0nEbQSBpFo2kMjaVxNJ4m0ESaRJNpCk2laTSdZtBMmkWzaQ7NpXk0nxbQQvqTFtFiWkJL
+aRktpxW0klbRalpDa2kdracNtJE20WbaQltpG22nHbSTdtFu2kN7aR/tpwN0kA7RYTpCR+kYHacT
+dJJO0Wk6Q2fpHJ2nC3SRLtFlukJX6Rpdpxt0k27RbbpDd+ke3acH9JAe0WN6Qk/pGT2nF/SSXtFr
+ekNv6R29pw/0kT7RZ/pCX+kbfacf9JN+kZAysOEQtuwYORSH5jAclsNxeI7AETkSR2bPUTgqR+Po
+HINjciyOzXE4Lsfj+JyAE3IiJmZOzEk4KSfj5JyCU3IqTs1pOC2n4/ScgTNyJv6NM3MWzsrZODvn
+4Jyci3NzHs7L+Tg/F+CCXIgLcxEuysW4OJfgklyKS3MZLsvluDxX4IpciStzFa7K1bg61+CaXItr
+cx2uy/W4Prfj9tyBO3In7sxduCt34+7cg3tyL+7Nfbjvf3nfj/vzAB7Ig3gwD+GhPIyH8wgeyaN4
+NI/hsTyOx/MEnsiTeDJP4ak8jafzDJ7Js3g2z+G5PI/n8wJeyH/yIl7MS3gpL+PlvIJX8ipezWt4
+La/j9byBN/Im3sxbeCtv4+28g3fyLt7Ne3gv7+P9fIAP8iE+zEf4KB/j43yCT/IpPs1n+Cyf4/N8
+gS/yJb7MV/gqX+PrfINv8i2+zXf4Lt/j+/yAH/IjfsxP+Ck/4+f8gl/yK37Nb/gtv+P3/IE/8if+
+zF/4K3/j7/yDf/IvFlYBMRIiVpyghJLQEkbCSjgJLxEkokSSyOIlikSVaBJdYkhMiSWxJY7ElXgS
+XxJIQkkkJCyJJYkklWSSXFJISkklqSWNpJV0kl4ySEbJJL9JZskiWSWbZJccklNySW7JI3kln+SX
+AlJQCklhKSJFpZgUlxJSUkpJaSkjZaWclJcKUlEqSWWpIlWlmlSXGlJTakltqSN1pZ7UlwbSUBpJ
+Y2kiTeV3aSbNpYW0lFbSWtrIH9JW2kl76SAdpZN0li7SVbpJd+khPaWX9JY+0lf6SX8ZIANlkAyW
+ITJUhslwGSEjZZSMljEyVsbJeJkgE2WSTJYpMlWmyXSZITNllsyWOTJX5sl8WSAL5U9ZJItliSyV
+ZbJcVshKWSWrZY2slXWyXjbIRtkkm2WLbJVtsl12yE7ZJbtlj+yVfbJfDshBOSSH5YgclWNyXE7I
+STklp+WMnJVzcl4uyEW5JJflilyVa3JdbshNuSW35Y7clXtyXx7IQ3kkj+WJPJVn8lxeyEt5Ja/l
+jbyVd/JePshH+SSf5Yt8lW/yXX7IT/klAqCgRkM0WAQUNZSG1jAaVsNpeI2gETWSRlavUTSqRtPo
+GkNjaiyNrXE0rsbT+JpAE2oiJS2ohbSwFtGiWkyLawktqaW0tJbRslpOy2sFraiVtLJW0apaTatr
+Da2ptTS35tG8mk/za4G/K19b62hdraf1tYE21EbaWJtoU/1dm2lzbaEttZW21jb6h7bVdtpeO2hH
+7aSdtYt21W7aXXtoT+2lvbWP9tV+2l8H6EAdpIN1iA7VYTpcR+hIHaWjdYyO1XE6XifoRJ2kk3WK
+TtVpOl1n6EydpbN1js7VeTpfF+hC/VMX6WJdokt1mS7XFbpSV+lqXaNrdZ2u1w26UTfpZt2iW3Wb
+btcdulN36W7do3t1n+7XA3pQD+lhPaJH9Zge1xN6Uk/paT2jZ/WcntcLelEv6WW9olf1ml7XG3pT
+b+ltvaN39Z7e1wf6UB/pY32iT/WZPtcX+lJf6Wt9o2/1nb7XD/pRP+ln/aJf9Zt+1x/6U3+pqP4D
+/l5umQ==
+"""
+))))
 
 class Config(object):
 	def __getattr__(self, key):
@@ -370,11 +446,15 @@ class HFSDriver(object):
 
 	class BTree(object):
 
+		class Key(object):
+			def __init__(self, data):
+				self.data = data
+
 		class Record(object):
 			def __init__(self, node, start, stop):
 				rem = BytesWrapper(node.em[start:stop])
 				keylen = rem[0,2]
-				self.key = rem[2:2+keylen]
+				self.key = node.btree.Key(rem[2:2+keylen])
 				self.data = rem[2+keylen:]
 				self.node = node
 
@@ -382,12 +462,17 @@ class HFSDriver(object):
 			pass
 
 		class PointerRecord(Record):
-			def __init__(self, *args, **kwargs):
-				HFSDriver.BTree.Record.__init__(self, *args, **kwargs)
+			def __init__(self, node, start, stop):
+				node.btree.Record.__init__(self, node, start, stop)
 				self.__target_node = BytesWrapper(self.data)[0,4]
 			target_node = property(lambda s: s.node.btree.Node(s.node.btree, s.__target_node))
 		
 		class Node(object):
+
+			TypeLeaf = 255
+			TypeIndex = 0
+			TypeHeader = 1
+			TypeMap = 2
 
 			def __init__(self, btree, nodenum):
 
@@ -408,18 +493,20 @@ class HFSDriver(object):
 					recoffsets.append(em[recoffoff,2])
 
 				recordtype = {
-					0: btree.PointerRecord,
-					255: btree.DataRecord,
+					self.TypeIndex: btree.PointerRecord,
+					self.TypeLeaf: btree.DataRecord,
 				}[self.__kind]
 
-				records = []
+				records = self.__records = []
 				recstarts = recoffsets
 				recstops = recoffsets[1:] + [nodesz + numrecords * -2]
 				for recstart, recstop in zip(recstarts, recstops):
 					records.append(recordtype(self, recstart, recstop))
 
 			em = property(lambda s: s.__em)
+			kind = property(lambda s: s.__kind)
 			btree = property(lambda s: s.__btree)
+			records = property(lambda s: s.__records)
 
 		def __init__(self, hfs, em):
 			# node header
@@ -432,14 +519,61 @@ class HFSDriver(object):
 		root_node = property(lambda s: s.Node(s, s.__root_node))
 		node_size = property(lambda s: s.__node_size)
 
+		def find_record_for_key(self, key):
+
+			node = self.root_node
+
+			# get leaf node
+			while True:
+				for record in node.records:
+					if key >= record.key:
+						node = record.target_node
+						break
+				if node.kind == node.TypeLeaf:
+					break
+
+			# get data record
+			for record in node.records:
+				if key == record.key:
+					return record
+
+			# record not found
+			return None
+
 	class Extents(BTree):
-		def __init__(self, *args, **kwargs):
-			HFSDriver.BTree.__init__(self, *args, **kwargs)
+		pass
 	
 	class Catalog(BTree):
-		def __init__(self, *args, **kwargs):
-			HFSDriver.BTree.__init__(self, *args, **kwargs)
-			self.root_node
+
+		class Key(object):
+			def __init__(self, data):
+				em = BytesWrapper(data)
+				self.parent_cnid = em[0,4]
+				namelen = em[4,2]
+				namebytes = data[6:6+2*namelen]
+				self.node_name = namebytes.decode('utf-16-be')
+				self.folded_node_name = self.fold(self.node_name)
+			def __ge__(self, other):
+				if self.parent_cnid < other.parent_cnid:
+					return False
+				if self.folded_node_name < other.folded_node_name:
+					return False
+				return True
+			def __eq__(self, other):
+				if self.parent_cnid != other.parent_cnid:
+					return False
+				if self.folded_node_name != other.folded_node_name:
+					return False
+				return True
+			def fold(self, name):
+				folded = []
+				for char in (ord(x) for x in name):
+					temp = lower_case_table[char >> 8]
+					if temp:
+						char = lower_case_table[temp + (char & 0xFF)]
+					if char:
+						folded.append(char)
+				return folded
 
 	def __init__(self, em):
 
@@ -460,10 +594,13 @@ class HFSDriver(object):
 			self.__catalog_file,
 			self.__attributes_file,
 			self.__startup_file
-		) = (HFSDriver.File(self, fork) for fork in headem.offset(112).pieces(80))
+		) = (self.File(self, fork) for fork in headem.offset(112).pieces(80))
 
-		self.__extents = HFSDriver.Extents(self, self.__extents_file)
-		self.__catalog = HFSDriver.Catalog(self, self.__catalog_file)
+		self.__extents = self.Extents(self, self.__extents_file)
+		self.__catalog = self.Catalog(self, self.__catalog_file)
+		
+		key = self.__catalog.root_node.records[0].key
+		print(self.__catalog.find_record_for_key(key))
 
 		raise 1
 
