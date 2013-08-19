@@ -444,6 +444,17 @@ class HFSDriver(object):
 		def _easysize(self):
 			return self.__logical_size
 	
+	class File(object):
+	
+		def __init__(self, record):
+
+			self.__record = record
+			self.__name = record.key.node_name
+	
+			em = BytesWrapper(record.data)
+			if em[0,2] != 0x0002:
+				raise ValueError('bad record on file')
+
 	class Folder(object):
 
 		def __init__(self, record):
@@ -460,8 +471,25 @@ class HFSDriver(object):
 
 		@property
 		def contents(self):
+
 			btree = self.__record.node.btree
 			trec = btree.find_record_for_key(btree.Key(parent_cnid=self.__cnid))
+
+			records = []
+			rec = trec.next_record
+			while rec.key.parent_cnid == self.__cnid:
+				records.append(rec)
+				rec = rec.next_record
+
+			contents = []
+			for rec in records:
+				rtype = BytesWrapper(rec.data)[0,2]
+				contents.append({
+					0x0001: HFSDriver.Folder,
+					0x0002: HFSDriver.File,
+				}[rtype](rec))
+			
+			return contents
 
 	class BTree(object):
 
