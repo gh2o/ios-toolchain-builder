@@ -412,7 +412,7 @@ class DMGFilter(EasyMixin):
 
 class HFSDriver(object):
 
-	class File(EasyMixin):
+	class Fork(EasyMixin):
 
 		def __init__(self, hfs, forkdata):
 			self.__hfs = hfs
@@ -651,15 +651,15 @@ class HFSDriver(object):
 		self.__block_size = block_size = headem[40,4]
 
 		(
-			self.__allocation_file,
-			self.__extents_file,
-			self.__catalog_file,
-			self.__attributes_file,
-			self.__startup_file
-		) = (self.File(self, fork) for fork in headem.offset(112).pieces(80))
+			self.__allocation_fork,
+			self.__extents_fork,
+			self.__catalog_fork,
+			self.__attributes_fork,
+			self.__startup_fork
+		) = (self.Fork(self, forkdata) for forkdata in headem.offset(112).pieces(80))
 
-		self.__extents = self.Extents(self, self.__extents_file)
-		self.__catalog = self.Catalog(self, self.__catalog_file)
+		self.__extents = self.Extents(self, self.__extents_fork)
+		self.__catalog = self.Catalog(self, self.__catalog_fork)
 		
 	em = property(lambda s: s.__em)
 	block_size = property(lambda s: s.__block_size)
