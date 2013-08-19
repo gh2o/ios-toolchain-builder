@@ -444,40 +444,53 @@ class HFSDriver(object):
 		def _easysize(self):
 			return self.__logical_size
 	
-	class File(object):
-	
-		def __init__(self, record):
+	class FileFolder(object):
 
-			self.__record = record
-			self.__name = record.key.node_name
+		def __init__(self, record, parent, rectype):
 	
+			self.__record = record
+			self.__parent = parent
+			self.__name = record.key.node_name
+
 			em = BytesWrapper(record.data)
-			if em[0,2] != 0x0002:
+			if em[0,2] != rectype:
 				raise ValueError('bad record on file')
-
-	class Folder(object):
-
-		def __init__(self, record):
-
-			self.__record = record
-			self.__name = record.key.node_name
-
-			em = BytesWrapper(record.data)
-			if em[0,2] != 0x0001:
-				raise ValueError('bad record on folder')
 			self.__cnid = em[8,4]
 
+		record = property(lambda s: s.__record)
+		parent = property(lambda s: s.__parent)
 		name = property(lambda s: s.__name)
+		cnid = property(lambda s: s.__cnid)
+
+		def __repr__(self):
+			return '<%s name=%r>' % (self.__class__.__name__, self.name)
+
+		@property
+		def full_path(self):
+			if self.parent:
+				return self.parent.full_path + [self.name]
+			else:
+				return []
+	
+	class File(FileFolder):
+
+		def __init__(self, record, parent):
+			HFSDriver.FileFolder.__init__(self, record, parent, 0x0002)
+
+	class Folder(FileFolder):
+
+		def __init__(self, record, parent):
+			HFSDriver.FileFolder.__init__(self, record, parent, 0x0001)
 
 		@property
 		def contents(self):
 
-			btree = self.__record.node.btree
-			trec = btree.find_record_for_key(btree.Key(parent_cnid=self.__cnid))
+			btree = self.record.node.btree
+			trec = btree.find_record_for_key(btree.Key(parent_cnid=self.cnid))
 
 			records = []
 			rec = trec.next_record
-			while rec.key.parent_cnid == self.__cnid:
+			while rec.key.parent_cnid == self.cnid:
 				records.append(rec)
 				rec = rec.next_record
 
@@ -487,7 +500,7 @@ class HFSDriver(object):
 				contents.append({
 					0x0001: HFSDriver.Folder,
 					0x0002: HFSDriver.File,
-				}[rtype](rec))
+				}[rtype](rec, self))
 			
 			return contents
 
@@ -606,10 +619,15 @@ class HFSDriver(object):
 
 			# get leaf node
 			while True:
+
+				lrecord = None
 				for record in node.records:
 					if key >= record.key:
-						node = record.target_node
+						lrecord = record
+					else:
 						break
+
+				node = lrecord.target_node
 				if node.kind == node.TypeLeaf:
 					break
 
@@ -696,7 +714,7 @@ class HFSDriver(object):
 	def root_folder(self):
 		key = self.__catalog.root_node.records[0].key
 		record = self.__catalog.find_record_for_key(key)
-		return self.Folder(record)
+		return self.Folder(record, None)
 
 def appleauth():
 
@@ -748,7 +766,8 @@ def run():
 
 	dmg = DMGFilter(em)
 	hfs = HFSDriver(dmg)
-	print(hfs.root_folder.contents)
+
+	print(hfs.root_folder.full_path)
 
 def makedir(x):
 	try:
