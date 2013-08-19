@@ -443,6 +443,25 @@ class HFSDriver(object):
 
 		def _easysize(self):
 			return self.__logical_size
+	
+	class Folder(object):
+
+		def __init__(self, record):
+
+			self.__record = record
+			self.__name = record.key.node_name
+
+			em = BytesWrapper(record.data)
+			if em[0,2] != 0x0001:
+				raise ValueError('bad record on folder')
+			self.__cnid = em[8,4]
+
+		name = property(lambda s: s.__name)
+
+		@property
+		def contents(self):
+			btree = self.__record.node.btree
+			trec = btree.find_record_for_key(btree.Key(parent_cnid=self.__cnid))
 
 	class BTree(object):
 
@@ -451,19 +470,39 @@ class HFSDriver(object):
 				self.data = data
 
 		class Record(object):
-			def __init__(self, node, start, stop):
-				rem = BytesWrapper(node.em[start:stop])
-				keylen = rem[0,2]
-				self.key = node.btree.Key(rem[2:2+keylen])
-				self.data = rem[2+keylen:]
+
+			def __init__(self, node, recnum, start, stop):
+				em = BytesWrapper(node.em[start:stop])
+				keylen = em[0,2]
+				self.key = node.btree.Key(em[2:2+keylen])
+				self.data = em[2+keylen:]
 				self.node = node
+				self.recnum = recnum
+
+			@property
+			def prev_record(self):
+				num = self.recnum - 1
+				if num >= 0:
+					return self.node.records[num]
+				if self.node.prev_node:
+					return self.node.prev_node.records[-1]
+				return None
+
+			@property
+			def next_record(self):
+				num = self.recnum + 1
+				if num < len(self.node.records):
+					return self.node.records[num]
+				if self.node.next_node:
+					return self.node.next_node.records[0]
+				return None
 
 		class DataRecord(Record):
 			pass
 
 		class PointerRecord(Record):
-			def __init__(self, node, start, stop):
-				node.btree.Record.__init__(self, node, start, stop)
+			def __init__(self, node, recnum, start, stop):
+				node.btree.Record.__init__(self, node, recnum, start, stop)
 				self.__target_node = BytesWrapper(self.data)[0,4]
 			target_node = property(lambda s: s.node.btree.Node(s.node.btree, s.__target_node))
 		
@@ -500,13 +539,27 @@ class HFSDriver(object):
 				records = self.__records = []
 				recstarts = recoffsets
 				recstops = recoffsets[1:] + [nodesz + numrecords * -2]
-				for recstart, recstop in zip(recstarts, recstops):
-					records.append(recordtype(self, recstart, recstop))
+				for recnum, recstart, recstop in zip(range(numrecords), recstarts, recstops):
+					records.append(recordtype(self, recnum, recstart, recstop))
 
 			em = property(lambda s: s.__em)
 			kind = property(lambda s: s.__kind)
 			btree = property(lambda s: s.__btree)
 			records = property(lambda s: s.__records)
+
+			@property
+			def prev_node(self):
+				if self.__blink:
+					return self.btree.Node(self.btree, self.__blink)
+				else:
+					return None
+
+			@property
+			def next_node(self):
+				if self.__flink:
+					return self.btree.Node(self.btree, self.__flink)
+				else:
+					return None
 
 		def __init__(self, hfs, em):
 			# node header
@@ -546,19 +599,28 @@ class HFSDriver(object):
 	class Catalog(BTree):
 
 		class Key(object):
-			def __init__(self, data):
-				em = BytesWrapper(data)
-				self.parent_cnid = em[0,4]
-				namelen = em[4,2]
-				namebytes = data[6:6+2*namelen]
-				self.node_name = namebytes.decode('utf-16-be')
-				self.folded_node_name = self.fold(self.node_name)
+			def __init__(self, data=None, parent_cnid=None):
+				if data is not None:
+					em = BytesWrapper(data)
+					self.parent_cnid = em[0,4]
+					namelen = em[4,2]
+					namebytes = data[6:6+2*namelen]
+					self.node_name = namebytes.decode('utf-16-be')
+					self.folded_node_name = self.fold(self.node_name)
+				elif parent_cnid is not None:
+					self.parent_cnid = parent_cnid
+					self.node_name = bytes().decode('utf-16-be')
+					self.folded_node_name = []
+				else:
+					raise TypeError
+			def __repr__(self):
+				return '<%s parent_cnid=%r node_name=%r>' % (self.__class__.__name__, self.parent_cnid, self.node_name)
 			def __ge__(self, other):
+				if self.parent_cnid > other.parent_cnid:
+					return True
 				if self.parent_cnid < other.parent_cnid:
 					return False
-				if self.folded_node_name < other.folded_node_name:
-					return False
-				return True
+				return self.folded_node_name >= other.folded_node_name
 			def __eq__(self, other):
 				if self.parent_cnid != other.parent_cnid:
 					return False
@@ -599,13 +661,14 @@ class HFSDriver(object):
 		self.__extents = self.Extents(self, self.__extents_file)
 		self.__catalog = self.Catalog(self, self.__catalog_file)
 		
-		key = self.__catalog.root_node.records[0].key
-		print(self.__catalog.find_record_for_key(key))
-
-		raise 1
-
 	em = property(lambda s: s.__em)
 	block_size = property(lambda s: s.__block_size)
+
+	@property
+	def root_folder(self):
+		key = self.__catalog.root_node.records[0].key
+		record = self.__catalog.find_record_for_key(key)
+		return self.Folder(record)
 
 def appleauth():
 
@@ -657,6 +720,7 @@ def run():
 
 	dmg = DMGFilter(em)
 	hfs = HFSDriver(dmg)
+	print(hfs.root_folder.contents)
 
 def makedir(x):
 	try:
