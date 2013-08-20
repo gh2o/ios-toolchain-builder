@@ -900,7 +900,7 @@ def run():
 	if hashlib.sha1(koly).hexdigest() != DMG_KOLY_SHA1:
 		raise Exception('bad DMG')
 
-	dmg = CacheFilter(DMGFilter(em), 16384)
+	dmg = CacheFilter(DMGFilter(em), 262144)
 	hfs = HFSDriver(dmg)
 	
 	sdk = hfs.get(['Xcode.app','Contents','Developer','Platforms','iPhoneOS.platform',
