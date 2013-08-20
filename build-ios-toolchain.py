@@ -23,10 +23,10 @@ from getpass import getpass
 logging.getLogger().setLevel(logging.DEBUG)
 
 try: # Python 3
-	from urllib.request import build_opener, HTTPRedirectHandler, HTTPCookieProcessor
+	from urllib.request import build_opener, HTTPRedirectHandler, HTTPCookieProcessor, Request
 	from urllib.parse import urlencode
 except ImportError: # Python 2
-	from urllib2 import build_opener, HTTPRedirectHandler, HTTPCookieProcessor
+	from urllib2 import build_opener, HTTPRedirectHandler, HTTPCookieProcessor, Request
 	from urllib import urlencode
 	input = raw_input
 	range = xrange
@@ -197,6 +197,24 @@ class HandleWrapper(EasyMixin):
 			self.__handle.seek(0, os.SEEK_END)
 			self.__size = self.__handle.tell()
 			self.__actualpos = None
+		return self.__size
+
+class HTTPWrapper(EasyMixin):
+
+	def __init__(self, url, size):
+		self.__url = url
+		self.__size = size
+
+	def _easyget(self, start, stop):
+		req = Request(self.__url, headers={
+			'Range': 'bytes=%s-%s' % (start, stop - 1)
+		})
+		print('requesting %d bytes of data' % (stop - start))
+		data = config.opener.open(req).read()
+		print('got %d bytes' % len(data))
+		return data
+	
+	def _easysize(self):
 		return self.__size
 
 class BytesWrapper(EasyMixin):
@@ -897,15 +915,34 @@ def appleauth():
 			print('Bad Apple ID or password. Is this account a registered developer account?')
 
 config = Config()
-config.xcodedmg = os.path.expanduser('~/Downloads/xcode4630916281a.dmg')
+config.redirector = RedirectHandler()
+config.opener = build_opener(config.redirector, HTTPCookieProcessor())
+#config.xcodedmg = os.path.expanduser('~/Downloads/xcode4630916281a.dmg')
 
 def run():
 
 	if config.xcodedmg:
+
 		em = HandleWrapper(open(config.xcodedmg, 'rb', 0))
+
 	else:
+
 		appleauth()
-		raise 1
+
+		class HeadRequest(Request):
+			def get_method(self):
+				return "HEAD"
+
+		url = "%s?path=%s" % (DMG_URL, DMG_PATH)
+		while True:
+			response = config.opener.open(HeadRequest(url))
+			if isinstance(response, RedirectResponse):
+				url = response.path
+			else:
+				break
+
+		size = int(response.info()['Content-Length'])
+		em = HTTPWrapper(url, size)
 
 	koly = em[-512:]
 	if hashlib.sha1(koly).hexdigest() != DMG_KOLY_SHA1:
