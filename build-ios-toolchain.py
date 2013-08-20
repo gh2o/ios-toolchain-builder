@@ -228,41 +228,6 @@ class OffsetFilter(EasyMixin):
 	def _easysize(self):
 		return self.__size
 
-'''
-class CacheFilter(EasyMixin):
-
-	class Item(object):
-		__slots__ = ['data', 'time']
-
-	def __init__(self, em, cache_size=32):
-		self.__em = em
-		self.__cache = {}
-		self.__cachesize = cache_size
-		self.__cachetime = 0
-
-	def __clean(self):
-		while len(self.__cache) > self.__cachesize:
-			cachetime, pos = min((item.time, pos) for pos, item in self.__cache.items())
-			del self.__cache[pos]
-	
-	def _easyget(self, start, stop):
-
-		sz = stop - start
-		item = self.__cache.get(start)
-		if item is not None and len(item.data) < sz:
-			item = None
-
-		if item is None:
-			item = self.__cache[start] = CacheFilter.Item()
-			item.data = self.__em[start:stop]
-
-		item.time = self.__cachetime
-		self.__cachetime += 1
-		self.__clean()
-		
-		return item.data[:sz]
-'''
-
 class CacheFilter(EasyMixin):
 
 	def __init__(self, em, block_size):
