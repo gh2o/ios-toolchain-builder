@@ -573,7 +573,10 @@ class HFSDriver(object):
 						for cem in cmpfrsrc.offset(4).pieces(8, numchunks):
 							offset = HFSDriver.Util.swap32(cem[0,4])
 							length = HFSDriver.Util.swap32(cem[4,4])
-							chunks.append(zlib.decompress(cmpfrsrc[offset:offset+length]))
+							if cmpfrsrc[offset,1] == 0xFF:
+								chunks.append(cmpfrsrc[offset+1:offset+length])
+							else:
+								chunks.append(zlib.decompress(cmpfrsrc[offset:offset+length]))
 						return bytes().join(chunks)
 					else:
 						raise NotImplementedError
