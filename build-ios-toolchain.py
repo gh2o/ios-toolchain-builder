@@ -262,7 +262,42 @@ class CacheFilter(EasyMixin):
 		
 		return item.data[:sz]
 '''
+
+class CacheFilter(EasyMixin):
+
+	def __init__(self, em, block_size):
+
+		self.__em = em
+		self.__block_size = block_size
+
+		nblocks = (em._easysize() + block_size - 1) // block_size
+		self.__blocks = [None] * nblocks
 	
+	def __get_block(self, blknum):
+		block = self.__blocks[blknum]
+		if block is None:
+			start = blknum * self.__block_size
+			stop = (blknum + 1) * self.__block_size
+			stop = min(stop, self.__em._easysize())
+			block = self.__em[start:stop]
+			self.__blocks[blknum] = block
+		return block
+	
+	def _easyget(self, start, stop):
+
+		data = []
+		while start < stop:
+			blknum = start // self.__block_size
+			blkoff = start % self.__block_size
+			blksz = min(self.__block_size - blkoff, stop - start)
+			block = self.__get_block(blknum)
+			data.append(block[blkoff:blkoff+blksz])
+			start += blksz
+		return bytes().join(data)
+
+	def _easysize(self):
+		return self.__em._easysize()
+
 class DMGFilter(EasyMixin):
 
 	__decompressors = {
@@ -900,7 +935,7 @@ def run():
 	if hashlib.sha1(koly).hexdigest() != DMG_KOLY_SHA1:
 		raise Exception('bad DMG')
 
-	dmg = DMGFilter(em)
+	dmg = CacheFilter(DMGFilter(em), 16384)
 	hfs = HFSDriver(dmg)
 	
 	sdk = hfs.get(['Xcode.app','Contents','Developer','Platforms','iPhoneOS.platform',
