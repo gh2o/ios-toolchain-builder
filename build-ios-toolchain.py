@@ -128,6 +128,8 @@ class RedirectHandler(HTTPRedirectHandler):
 
 class EasyMixin(object):
 
+	__size_to_format = {1: '>B', 2: '>H', 4: '>L', 8: '>Q'}
+
 	def __getitem__(self, key):
 		if isinstance(key, int):
 			if key < 0:
@@ -152,8 +154,7 @@ class EasyMixin(object):
 			if off < 0:
 				off += self._easysize()
 			data = self._easyget(off, off + sz)
-			fmt = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
-			return struct.unpack('>' + fmt[sz], data)[0]
+			return struct.unpack(self.__size_to_format[sz], data)[0]
 	
 	def offset(self, offset, size=None):
 		if size is None:
