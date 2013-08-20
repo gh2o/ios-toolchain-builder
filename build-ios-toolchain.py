@@ -519,6 +519,7 @@ class HFSDriver(object):
 
 			self.__admin_flags = em[40,1]
 			self.__owner_flags = em[41,1]
+			self.__file_mode = em[42,2]
 
 		record = property(lambda s: s.__record)
 		parent = property(lambda s: s.__parent)
@@ -526,6 +527,7 @@ class HFSDriver(object):
 		cnid = property(lambda s: s.__cnid)
 		admin_flags = property(lambda s: s.__admin_flags)
 		owner_flags = property(lambda s: s.__owner_flags)
+		file_mode = property(lambda s: s.__file_mode)
 
 		def __repr__(self):
 			return '<%s name=%r>' % (self.__class__.__name__, self.name)
@@ -580,6 +582,10 @@ class HFSDriver(object):
 			else:
 				datafork = hfs.Fork(hfs, BytesWrapper(self.record.data[88:168]))
 				return datafork[:]
+
+		@property
+		def issymlink(self):
+			return self.file_mode == 0xA000
 
 	class Folder(FileFolder):
 
