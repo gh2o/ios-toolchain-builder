@@ -533,11 +533,15 @@ class HFSDriver(object):
 			return '<%s name=%r>' % (self.__class__.__name__, self.name)
 
 		@property
-		def full_path(self):
+		def full_path_components(self):
 			if self.parent:
-				return self.parent.full_path + [self.name]
+				return self.parent.full_path_components + [self.name]
 			else:
 				return []
+
+		@property
+		def full_path(self):
+			return '/'.join(x.replace('/', ':') for x in self.full_path_components)
 	
 	class File(FileFolder):
 
