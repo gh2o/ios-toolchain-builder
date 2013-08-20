@@ -759,7 +759,7 @@ class HFSDriver(object):
 					self.folded_node_name = self.fold(self.node_name)
 				elif parent_cnid is not None:
 					self.parent_cnid = parent_cnid
-					self.node_name = bytes().decode('utf-16-be')
+					self.node_name = str()
 					self.folded_node_name = []
 				else:
 					raise TypeError
