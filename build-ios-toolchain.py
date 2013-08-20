@@ -412,6 +412,36 @@ class DMGFilter(EasyMixin):
 
 class HFSDriver(object):
 
+	class Util(object):
+
+		@staticmethod
+		def swap32(n):
+			n &= (1 << 32) - 1
+			n = (
+				(n >> 24 & 0x000000FF) |
+				(n >> 8  & 0x0000FF00) |
+				(n << 8  & 0x00FF0000) |
+				(n << 24 & 0xFF000000)
+			)
+			n &= (1 << 32) - 1
+			return n
+
+		@staticmethod
+		def swap64(n):
+			n &= (1 << 64) - 1
+			n = (
+				(n >> 56 & 0x00000000000000FF) |
+				(n >> 40 & 0x000000000000FF00) |
+				(n >> 24 & 0x0000000000FF0000) |
+				(n >> 8  & 0x00000000FF000000) |
+				(n << 8  & 0x000000FF00000000) |
+				(n << 24 & 0x0000FF0000000000) |
+				(n << 40 & 0x00FF000000000000) |
+				(n << 56 & 0xFF00000000000000)
+			)
+			n &= (1 << 64) - 1
+			return n
+
 	class Fork(EasyMixin):
 
 		def __init__(self, hfs, forkdata):
@@ -419,7 +449,7 @@ class HFSDriver(object):
 			self.__logical_size = forkdata[0,8]
 			self.__total_blocks = forkdata[12,4]
 			self.__blocks = []
-			for extent in forkdata.offset(16).pieces(8):
+			for extent in forkdata.offset(16).pieces(8, 8):
 				start_block = extent[0,4]
 				block_count = extent[4,4]
 				self.__blocks.extend(range(start_block, start_block + block_count))
@@ -443,6 +473,41 @@ class HFSDriver(object):
 
 		def _easysize(self):
 			return self.__logical_size
+	
+	class ResourceFork(Fork):
+
+		def __init__(self, hfs, forkdata):
+			hfs.Fork.__init__(self, hfs, forkdata)
+			headem = BytesWrapper(self[0:16])
+			resources = self.__resources = []
+			data_offset = headem[0,4]
+			map_offset = headem[4,4]
+			map_size = headem[12,4]
+			mapem = BytesWrapper(self[map_offset:map_offset+map_size])
+			types_list_offset = mapem[24,2]
+			types_count = (mapem[types_list_offset,2] + 1) & 0xFFFF
+			for sem in mapem.offset(types_list_offset + 2).pieces(8, types_count):
+				resource_type = sem[0:4]
+				resource_count = (sem[4,2] + 1) & 0xFFFF
+				resource_list_offset = sem[6,2]
+				for resource in mapem.offset(types_list_offset + resource_list_offset).pieces(12, resource_count):
+					resource_id = resource[0,2]
+					resource_data_offset = resource[4,4]
+					resource_data_size = self[data_offset+resource_data_offset,4]
+					resources.append((resource_type, resource_id, self.offset(
+						data_offset+resource_data_offset+4, resource_data_size)))
+
+		def get_resources(self, type=None, id=None):
+			ret = []
+			if not isinstance(type, bytes):
+				type = type.encode('ascii')
+			for resource in self.__resources:
+				if type is not None and resource[0] != type:
+					continue
+				if id is not None and resource[1] != id:
+					continue
+				ret.append(resource[2])
+			return ret
 	
 	class FileFolder(object):
 
@@ -482,6 +547,42 @@ class HFSDriver(object):
 		def __init__(self, record, parent):
 			HFSDriver.FileFolder.__init__(self, record, parent, 0x0002)
 
+		@property
+		def data(self):
+			hfs = self.record.node.btree.hfs
+			if self.owner_flags & 0x20: # compressed
+				attrkey = hfs.attributes.Key(cnid=self.cnid, key_name="com.apple.decmpfs")
+				attrrec = hfs.attributes.find_record_for_key(attrkey)
+				attrem = BytesWrapper(attrrec.data)
+				attrtype = attrem[0,4]
+				if attrtype == 0x10:
+					attrsize = attrem[12,4]
+					compmagic = HFSDriver.Util.swap32(attrem[16,4])
+					comptype = HFSDriver.Util.swap32(attrem[20,4])
+					uncompsize = HFSDriver.Util.swap64(attrem[24,8])
+					if comptype == 0x03:
+						if attrem[32,1] == 0xFF:
+							return attrem[33:33+uncompsize]
+						else:
+							return zlib.decompress(attrem[32:16+attrsize])
+					elif comptype == 0x04:
+						rsrcfork = hfs.ResourceFork(hfs, BytesWrapper(self.record.data[168:248]))
+						cmpfrsrc = rsrcfork.get_resources(type='cmpf', id=1)[0]
+						numchunks = HFSDriver.Util.swap32(cmpfrsrc[0,4])
+						chunks = []
+						for cem in cmpfrsrc.offset(4).pieces(8, numchunks):
+							offset = HFSDriver.Util.swap32(cem[0,4])
+							length = HFSDriver.Util.swap32(cem[4,4])
+							chunks.append(zlib.decompress(cmpfrsrc[offset:offset+length]))
+						return bytes().join(chunks)
+					else:
+						raise NotImplementedError
+				else:
+					raise NotImplementedError
+			else:
+				datafork = hfs.Fork(hfs, BytesWrapper(self.record.data[88:168]))
+				return datafork[:]
+
 	class Folder(FileFolder):
 
 		def __init__(self, record, parent):
@@ -502,8 +603,8 @@ class HFSDriver(object):
 			contents = {}
 			for rec in records:
 				ff = {
-					0x0001: HFSDriver.Folder,
-					0x0002: HFSDriver.File,
+					0x0001: btree.hfs.Folder,
+					0x0002: btree.hfs.File,
 				}[BytesWrapper(rec.data)[0,2]](rec, self)
 				contents[ff.name] = ff
 			
@@ -608,12 +709,13 @@ class HFSDriver(object):
 					return None
 
 		def __init__(self, hfs, em):
-			# node header
+			self.__hfs = hfs
 			self.__em = em
 			headem = BytesWrapper(em[14:128])
 			self.__root_node = headem[2,4]
 			self.__node_size = headem[18,2]
 
+		hfs = property(lambda s: s.__hfs)
 		em = property(lambda s: s.__em)
 		root_node = property(lambda s: s.Node(s, s.__root_node))
 		node_size = property(lambda s: s.__node_size)
@@ -673,11 +775,8 @@ class HFSDriver(object):
 					return False
 				return self.folded_node_name >= other.folded_node_name
 			def __eq__(self, other):
-				if self.parent_cnid != other.parent_cnid:
-					return False
-				if self.folded_node_name != other.folded_node_name:
-					return False
-				return True
+				return (self.parent_cnid == other.parent_cnid and
+					self.folded_node_name == other.folded_node_name)
 			def fold(self, name):
 				folded = []
 				for char in (ord(x) for x in name):
@@ -687,6 +786,30 @@ class HFSDriver(object):
 					if char:
 						folded.append(char)
 				return folded
+	
+	class Attributes(BTree):
+
+		class Key(object):
+			def __init__(self, data=None, cnid=None, key_name=None):
+				if data is not None:
+					em = BytesWrapper(data)
+					self.cnid = em[2,4]
+					namelen = em[10,2]
+					namebytes = em[12:12+2*namelen]
+					self.key_name = namebytes.decode('utf-16-be')
+				elif cnid is not None and key_name is not None:
+					self.cnid = cnid
+					self.key_name = key_name
+				else:
+					raise TypeError
+			def __ge__(self, other):
+				if self.cnid > other.cnid:
+					return True
+				if self.cnid < other.cnid:
+					return False
+				return self.key_name >= other.key_name
+			def __eq__(self, other):
+				return (self.cnid == other.cnid and self.key_name == other.key_name)
 
 	def __init__(self, em):
 
@@ -707,13 +830,18 @@ class HFSDriver(object):
 			self.__catalog_fork,
 			self.__attributes_fork,
 			self.__startup_fork
-		) = (self.Fork(self, forkdata) for forkdata in headem.offset(112).pieces(80))
+		) = (self.Fork(self, forkdata) for forkdata in headem.offset(112).pieces(80, 5))
 
 		self.__extents = self.Extents(self, self.__extents_fork)
 		self.__catalog = self.Catalog(self, self.__catalog_fork)
+		self.__attributes = self.Attributes(self, self.__attributes_fork)
 		
 	em = property(lambda s: s.__em)
 	block_size = property(lambda s: s.__block_size)
+
+	extents = property(lambda s:s.__extents)
+	catalog = property(lambda s:s.__catalog)
+	attributes = property(lambda s:s.__attributes)
 
 	@property
 	def root_folder(self):
@@ -778,8 +906,17 @@ def run():
 	dmg = DMGFilter(em)
 	hfs = HFSDriver(dmg)
 	
-	fl = hfs.get(['Xcode.app','Contents','Developer','Platforms','iPhoneOS.platform',
-		'Developer','SDKs','iPhoneOS6.1.sdk', 'usr', 'include', 'stdio.h'])
+	sdk = hfs.get(['Xcode.app','Contents','Developer','Platforms','iPhoneOS.platform',
+		'Developer','SDKs','iPhoneOS6.1.sdk'])
+
+	def walk(obj):
+		if isinstance(obj, HFSDriver.Folder):
+			for n, c in sorted(obj.contents.items()):
+				walk(c)
+		elif isinstance(obj, HFSDriver.File):
+			obj.data
+
+	walk(sdk)
 
 def makedir(x):
 	try:
