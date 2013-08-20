@@ -918,17 +918,20 @@ def run():
 		'Developer','SDKs','iPhoneOS6.1.sdk'])
 
 	def walk(obj):
+		ppath = os.path.join(config.prefix, obj.full_path)
 		if isinstance(obj, HFSDriver.Folder):
-			for n, c in sorted(obj.contents.items()):
+			makedir(ppath)
+			for c in obj.contents.values():
 				walk(c)
 		elif isinstance(obj, HFSDriver.File):
-			obj.data
+			with open(ppath, 'wb') as f:
+				os.chmod(ppath, obj.file_mode & 0x1FF)
+				f.write(obj.data)
 
 	walk(sdk)
 
 def makedir(x):
 	try:
-		logging.debug('creating dir at %r', x)
 		os.makedirs(x)
 	except OSError:
 		if not os.path.isdir(x):
