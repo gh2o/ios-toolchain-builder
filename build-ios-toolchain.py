@@ -361,21 +361,15 @@ class DMGFilter(EasyMixin):
 
 	def _easyget(self, start, stop):
 
-		first_byte = start
-		last_byte = stop - 1
-		first_chunk_index = bisect.bisect(self.__chunks, first_byte) - 1
-		last_chunk_index = bisect.bisect(self.__chunks, last_byte) - 1
-
-		uncompressed_data = []
-		for chunk_index in range(first_chunk_index, last_chunk_index + 1):
+		data = []
+		while start < stop:
+			chunk_index = bisect.bisect(self.__chunks, start) - 1
 			chunk = self.__chunks[chunk_index]
-			uncompressed_data.append(self.decompress_chunk(self.__chunks[chunk_index]))
-		uncompressed_data = bytes().join(uncompressed_data)
-
-		first_chunk = self.__chunks[first_chunk_index]
-		first_byte -= first_chunk.uoffset
-		last_byte -= first_chunk.uoffset
-		return uncompressed_data[first_byte:last_byte+1]
+			chunk_offset = start - chunk.uoffset
+			chunk_size = min(chunk.usize - chunk_offset, stop - start)
+			data.append(self.decompress_chunk(chunk)[chunk_offset:chunk_offset+chunk_size])
+			start += chunk_size
+		return bytes().join(data)
 
 	def _easysize(self):
 		return self.__size
